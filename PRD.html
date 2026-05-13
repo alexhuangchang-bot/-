@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭账本应用 PRD</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            line-height: 1.6;
+            padding: 40px 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 36px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.5px; }
+        h2 { font-size: 24px; font-weight: 600; margin: 40px 0 16px; color: #1d1d1f; padding-bottom: 8px; border-bottom: 2px solid #007aff; display: inline-block; }
+        h3 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; color: #1d1d1f; }
+        h4 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; color: #1d1d1f; }
+        p { margin-bottom: 12px; }
+        .card { background: white; border-radius: 16px; padding: 28px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.04); }
+        ul, ol { margin-left: 24px; margin-bottom: 16px; }
+        li { margin-bottom: 8px; }
+        code { background: #f5f5f7; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 14px; }
+        .header-box { background: linear-gradient(135deg, #007aff, #5856d6); color: white; padding: 40px; border-radius: 20px; margin-bottom: 30px; }
+        .header-box h1 { color: white; }
+        .header-box .subtitle { color: rgba(255,255,255,0.85); }
+        .tag { display: inline-block; background: #007aff; color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-right: 8px; margin-bottom: 8px; }
+        .section-divider { height: 1px; background: #e5e5ea; margin: 30px 0; }
+    </style>
+</head>
+<body>
+    <div class="header-box">
+        <h1>家庭账本应用 PRD</h1>
+        <p class="subtitle">产品需求文档 · 版本 v1.1</p>
+    </div>
+
+    <div class="card">
+        <h2>1. 项目概述</h2>
+        <h3>1.1 项目背景</h3>
+        <p>为管理家庭收支、记录工资分配而设计的单页Web应用，采用Apple风格UI设计。</p>
+        <h3>1.2 用户角色</h3>
+        <p>家庭成员，工资在每月16号发放</p>
+    </div>
+
+    <div class="card">
+        <h2>2. 功能需求</h2>
+        <h3>2.1 核心概念</h3>
+        <ul>
+            <li><strong>发薪日</strong>：每月16号（可设置）</li>
+            <li><strong>日常预算</strong>：固定每月6300元</li>
+            <li><strong>收入分配逻辑</strong>：工资到账后，分配为三部分 - 日常预算、上月额外支出、交给老婆</li>
+        </ul>
+
+        <div class="section-divider"></div>
+
+        <h4>2.2.1 首页</h4>
+        <p><span class="tag">核心功能</span></p>
+        <ul>
+            <li>当前周期卡片：显示周期日期、本期收入、日常预算、上月额外支出、交给老婆</li>
+            <li>快速操作区：记收入、记支出（两个按钮并排）</li>
+            <li>支出列表区：最近支出记录，只显示最近两个月，更早的可折叠展开</li>
+            <li>每条支出记录显示：图标、分类、日期、金额、编辑/删除按钮</li>
+        </ul>
+
+        <p><strong>周期显示逻辑</strong>：</p>
+        <ul>
+            <li>今日5月12日（<16号）：当前周期显示 <strong>4月16日～5月15日</strong>（正在进行的周期）</li>
+            <li>今日5月16日及以后：当前周期显示 <strong>5月16日～6月15日</strong></li>
+        </ul>
+
+        <p><strong>金额计算逻辑</strong>：</p>
+        <ul>
+            <li>本期收入：记录在当前周期内的收入</li>
+            <li>日常预算：固定6300元</li>
+            <li>上月额外支出：上一个完整周期的额外支出总和</li>
+            <li>交给老婆：本期收入 - 6300 - 上月额外支出</li>
+        </ul>
+
+        <h4>2.2.2 记收入</h4>
+        <p><strong>流程</strong>：</p>
+        <ol>
+            <li>点击「记收入」</li>
+            <li>输入金额、来源、日期</li>
+            <li>预览上月额外支出、分配结果（日常6300 + 上月额外 + 老婆 = 总收入）</li>
+            <li>保存</li>
+        </ol>
+
+        <h4>2.2.3 记支出</h4>
+        <p><strong>流程</strong>：</p>
+        <ol>
+            <li>点击「记支出」</li>
+            <li>输入金额、选择支出类型（日常/额外）</li>
+            <li>选择分类、日期、备注（可选）</li>
+            <li>保存</li>
+        </ol>
+
+        <h4>2.2.4 统计页面</h4>
+        <ul>
+            <li>年份选择器：可切换年份</li>
+            <li>年度汇总卡片：总收入、日常支出、额外支出、交给老婆</li>
+            <li>月度趋势区：按倒序只显示有数据的月份，每个月的三色堆叠图（黄色日常、粉色额外、紫色老婆）+ 金额标签</li>
+        </ul>
+
+        <h4>2.2.5 收入列表页面</h4>
+        <ul>
+            <li>按年份分组显示所有历史收入记录</li>
+            <li>每条记录：图标、来源、日期、金额、编辑/删除按钮</li>
+        </ul>
+
+        <h4>2.2.6 额外支出分类页面</h4>
+        <ul>
+            <li>年份选择器</li>
+            <li>显示选中年份的额外支出分类统计，带进度条</li>
+        </ul>
+
+        <h4>2.2.7 设置</h4>
+        <ul>
+            <li>设置日常预算（默认6300）</li>
+            <li>设置发薪日（默认16号）</li>
+            <li>清除所有数据（危险操作）</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>3. UI设计规范</h2>
+        <h3>3.1 设计风格</h3>
+        <ul>
+            <li><strong>Apple风格</strong>：简洁、圆角、柔和阴影</li>
+            <li><strong>主题色</strong>：蓝色主色、绿色成功、红色错误/删除、紫色老婆、黄色日常、粉色额外</li>
+        </ul>
+
+        <h3>3.2 页面布局</h3>
+        <ul>
+            <li><strong>响应式单栏</strong>：最大宽度600px，居中显示</li>
+            <li><strong>卡片式设计</strong>：所有内容区域用白色卡片包裹，圆角16px</li>
+            <li><strong>导航</strong>：顶部4个标签切换页面</li>
+        </ul>
+
+        <h3>3.3 交互设计</h3>
+        <ul>
+            <li><strong>按钮</strong>：小圆角，正常大小按钮，编辑蓝色、删除红色</li>
+            <li><strong>列表项</strong>：左图标、中间信息、右金额+按钮横向排列</li>
+            <li><strong>折叠展开</strong>：三角形图标，点击切换</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>4. 数据存储</h2>
+        <h3>4.1 本地存储</h3>
+        <ul>
+            <li>使用浏览器localStorage</li>
+            <li>Key：<code>familyBudget_v2</code></li>
+            <li>刷新页面数据不丢失</li>
+        </ul>
+
+        <h3>4.2 数据结构</h3>
+        <pre><code>{
+  settings: { dailyBudget: 6300, payday: 16 },
+  incomes: [ { id, amount, source, date, allocatedDaily, allocatedExtra, allocatedWife } ],
+  expenses: [ { id, amount, type, categoryId, categoryName, categoryEmoji, date, note } ],
+  categories: {
+    daily: [ { id, name, emoji } ],
+    extra: [ { id, name, emoji } ]
+  }
+}</code></pre>
+    </div>
+
+    <div class="card">
+        <h2>5. 使用流程</h2>
+        <h3>5.1 发薪后的记账流程</h3>
+        <ol>
+            <li>5月16日收到工资 → 点击「记收入」</li>
+            <li>输入工资金额，系统自动显示上一个周期（4月16日～5月15日）的额外支出</li>
+            <li>计算老婆部分：收入 - 6300 - 上月额外支出</li>
+            <li>日常支出随时记，走「记支出」-「日常」</li>
+            <li>额外支出随时记，走「记支出」-「额外」</li>
+        </ol>
+
+        <h3>5.2 查看流程</h3>
+        <ul>
+            <li>首页看当前周期和最近支出</li>
+            <li>统计页看年度汇总和趋势</li>
+            <li>收入列表页看历史收入</li>
+            <li>额外分类页看额外支出构成</li>
+        </ul>
+    </div>
+
+    <div style="text-align: center; color: #86868b; margin-top: 40px; font-size: 14px;">
+        文档结束 · 2026
+    </div>
+
+</body>
+</html>

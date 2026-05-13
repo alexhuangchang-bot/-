@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>家庭账本 · Household Account</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..600;1,9..40,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-card">
+            <p class="brand-title auth-brand">Household Account</p>
+            <h2 class="auth-title">登录家庭账本</h2>
+            <p class="auth-lead">You Know the Drill🤭</p>
+            <div id="auth-config-warning" class="auth-config-warning" hidden>
+                请先在项目里的 <code>supabase-config.js</code> 中填写 <code>SUPABASE_URL</code> 与 <code>SUPABASE_ANON_KEY</code>（来自 Supabase 控制台 → Project Settings → API），保存后刷新本页。
+            </div>
+            <form id="auth-form" class="auth-form">
+                <div class="form-group auth-field">
+                    <label for="auth-email">邮箱</label>
+                    <input type="email" id="auth-email" required autocomplete="username" placeholder="you@example.com">
+                </div>
+                <div class="form-group auth-field">
+                    <label for="auth-password">密码</label>
+                    <input type="password" id="auth-password" required autocomplete="current-password" placeholder="至少 6 位">
+                </div>
+                <p id="auth-error" class="auth-error" role="alert" hidden></p>
+                <button type="submit" class="action-btn primary auth-submit" id="auth-submit">登录</button>
+            </form>
+            <button type="button" class="auth-toggle" id="auth-toggle-mode">没有账号？注册</button>
+        </div>
+    </div>
+
+    <div class="app is-hidden">
+        <header class="header">
+            <div class="header-inner">
+                <h1 class="brand-title">Household Account</h1>
+                <button type="button" class="settings-btn" id="btn-settings" aria-label="设置">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="2"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <span class="settings-label">设置</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="page-tabs" role="tablist" aria-label="页面切换">
+            <button class="page-tab active" data-page="home">首页</button>
+            <button class="page-tab" data-page="stats">统计</button>
+            <button class="page-tab" data-page="income-list">收入列表</button>
+            <button class="page-tab" data-page="extra-categories">额外支出</button>
+        </div>
+
+        <main class="content" id="home-page">
+            <section class="hero-block">
+                <h2 class="hero-heading">把家里的账算清楚</h2>
+                <p class="hero-lead">按发薪周期汇总收支，该交多少一目了然。</p>
+            </section>
+
+            <section class="card cycle-card">
+                <div class="cycle-title">
+                    <span>当前周期</span>
+                    <span class="cycle-date" id="cycle-date"></span>
+                </div>
+                <div class="status-active" id="status-active">
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-label">本期收入</div>
+                            <div class="stat-value income" id="stat-income">待填入</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">日常预算</div>
+                            <div class="stat-value" id="stat-daily-budget">¥6300</div>
+                        </div>
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-item">
+                            <div class="stat-label">上月额外支出</div>
+                            <div class="stat-value expense" id="stat-extra">¥0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">交给老婆</div>
+                            <div class="stat-value wife" id="stat-wife">待计算</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="quick-actions">
+                <button class="action-btn secondary" id="btn-add-income">
+                    <span class="icon">💰</span>
+                    <span>记收入</span>
+                </button>
+                <button class="action-btn primary" id="btn-add-expense">
+                    <span class="icon">+</span>
+                    <span>记支出</span>
+                </button>
+            </div>
+
+            <section class="card transactions-card">
+                <div class="card-header">
+                    <h2>最近支出</h2>
+                </div>
+                <div id="transactions-list" class="transactions-list">
+                    <div class="empty-state">
+                        <p>还没有支出记录</p>
+                    </div>
+                </div>
+                <div id="transactions-list-old" class="transactions-list-old" style="display: none;"></div>
+                <button class="expand-btn" id="expand-expense" style="display: none;">
+                    <span class="expand-icon">▼</span> 更早记录
+                </button>
+            </section>
+        </main>
+
+        <!-- 统计页面 -->
+        <main class="content" id="stats-page" style="display: none;">
+            <section class="card stats-header-card">
+                <div class="year-selector">
+                    <button class="year-nav" id="prev-year">‹</button>
+                    <select class="year-select" id="year-select"></select>
+                    <button class="year-nav" id="next-year">›</button>
+                </div>
+                <div class="year-subtitle" id="year-subtitle">截至今天</div>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>年度汇总</h2>
+                </div>
+                <div class="year-summary-grid">
+                    <div class="sum-item">
+                        <div class="sum-label">总收入</div>
+                        <div class="sum-value income" id="sum-income">¥0</div>
+                    </div>
+                    <div class="sum-item">
+                        <div class="sum-label">日常支出</div>
+                        <div class="sum-value" id="sum-daily">¥0</div>
+                    </div>
+                    <div class="sum-item">
+                        <div class="sum-label">额外支出</div>
+                        <div class="sum-value expense" id="sum-extra">¥0</div>
+                    </div>
+                    <div class="sum-item">
+                        <div class="sum-label">交给老婆</div>
+                        <div class="sum-value wife" id="sum-wife">¥0</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>月度趋势</h2>
+                </div>
+                <div id="monthly-chart" class="monthly-chart"></div>
+            </section>
+        </main>
+
+        <!-- 收入列表页 -->
+        <main class="content" id="income-list-page" style="display: none;">
+            <section class="card">
+                <div class="card-header">
+                    <h2>收入记录</h2>
+                </div>
+                <div id="income-list-full" class="income-list">
+                    <div class="empty-state">
+                        <p>还没有收入记录</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 额外支出分类页 -->
+        <main class="content" id="extra-categories-page" style="display: none;">
+            <section class="card stats-header-card">
+                <div class="year-selector">
+                    <button class="year-nav" id="prev-year-extra">‹</button>
+                    <select class="year-select" id="year-select-extra"></select>
+                    <button class="year-nav" id="next-year-extra">›</button>
+                </div>
+                <div class="year-subtitle" id="year-subtitle-extra">截至今天</div>
+            </section>
+
+            <section class="card">
+                <div class="card-header">
+                    <h2>额外支出分类</h2>
+                </div>
+                <div id="extra-breakdown-full" class="extra-breakdown"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="expense-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button class="modal-close" id="close-expense">取消</button>
+                <h3 id="expense-modal-title">记支出</h3>
+                <button class="modal-done" id="save-expense">完成</button>
+            </div>
+            <div class="modal-body">
+                <div class="amount-input-wrapper">
+                    <span class="currency">¥</span>
+                    <input type="number" id="expense-amount" class="amount-input" placeholder="0.00" step="0.01" autofocus>
+                </div>
+                <div class="type-selector">
+                    <button class="type-btn active" data-type="extra">额外支出</button>
+                    <button class="type-btn" data-type="daily">日常支出</button>
+                </div>
+                <div class="category-grid" id="category-grid"></div>
+                <div class="form-group">
+                    <label>日期</label>
+                    <input type="date" id="expense-date">
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="expense-note" placeholder="可选">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="income-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button class="modal-close" id="close-income">取消</button>
+                <h3 id="income-modal-title">记收入</h3>
+                <button class="modal-done" id="save-income">完成</button>
+            </div>
+            <div class="modal-body">
+                <div class="amount-input-wrapper">
+                    <span class="currency">¥</span>
+                    <input type="number" id="income-amount" class="amount-input" placeholder="0.00" step="0.01" autofocus>
+                </div>
+                <div class="form-group">
+                    <label>来源</label>
+                    <input type="text" id="income-source" value="工资">
+                </div>
+                <div class="form-group">
+                    <label>日期</label>
+                    <input type="date" id="income-date">
+                </div>
+                <div id="income-preview-section">
+                    <div class="summary-section">
+                        <div class="summary-header">上月额外支出</div>
+                        <div id="last-extra-list" class="mini-transactions"></div>
+                        <div class="summary-total">
+                            <span>合计</span>
+                            <span class="extra-total" id="last-extra-total">¥0</span>
+                        </div>
+                    </div>
+                    <div class="allocation-preview">
+                        <div class="alloc-row">
+                            <span class="alloc-label">日常预算</span>
+                            <span class="alloc-value" id="alloc-daily">¥6300</span>
+                        </div>
+                        <div class="alloc-row">
+                            <span class="alloc-label">上月额外支出</span>
+                            <span class="alloc-value expense" id="alloc-extra">¥0</span>
+                        </div>
+                        <div class="alloc-row total">
+                            <span class="alloc-label">交给老婆</span>
+                            <span class="alloc-value wife" id="alloc-wife">¥0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <button class="modal-close" id="close-settings">取消</button>
+                <h3>设置</h3>
+                <button class="modal-done" id="save-settings">完成</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>日常预算</label>
+                    <div class="amount-input-wrapper small">
+                        <span class="currency">¥</span>
+                        <input type="number" id="setting-daily-budget" class="amount-input" placeholder="0" step="100" value="6300">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>发薪日</label>
+                    <select id="setting-payday">
+                        <option value="1">1号</option>
+                        <option value="16" selected>16号</option>
+                    </select>
+                </div>
+                <div class="form-group session-row">
+                    <label>当前账号</label>
+                    <p class="session-email" id="settings-session-email">—</p>
+                </div>
+                <button type="button" class="btn-logout" id="btn-logout">退出登录</button>
+                <div class="danger-zone">
+                    <button class="btn-delete" id="clear-data">清除所有数据</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+    <script src="boot-cloud.js"></script>
+</body>
+</html>
