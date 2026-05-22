@@ -1,4 +1,20 @@
 const DEFAULT_SETTINGS = { dailyBudget: 6300, payday: 16 };
+const INCOME_SOURCE_PRESETS = ['工资', '奖金', '二手回收', '其他'];
+const STATS_METRIC_LABELS = {
+    income: '月度收入',
+    daily: '月度日常支出',
+    extra: '月度额外支出',
+    extraRecord: '月度不可报销额外支出',
+    wife: '月度交给老婆'
+};
+
+function isReimbursableExtra(exp) {
+    return exp.type === 'extra' && exp.reimbursable !== false;
+}
+
+function isRecordOnlyExtra(exp) {
+    return exp.type === 'extra' && exp.reimbursable === false;
+}
 
 const DEFAULT_CATEGORIES = {
     daily: [
@@ -170,10 +186,10 @@ class DataStore {
     deleteIncome(id) { this.incomes = this.incomes.filter(i => i.id !== id); this.save(); }
     clearAll() { this.settings = { ...DEFAULT_SETTINGS }; this.incomes = []; this.expenses = []; this.categories = DEFAULT_CATEGORIES; this.save(); }
 
-    /** 上一发薪周期内的「额外支出」列表与合计（供首页、记收入预览等多处复用） */
+    /** 上一发薪周期内「可报销」额外支出（影响交给老婆） */
     getLastCycleExtraSummary() {
         const range = this.getLastPaydayRange();
-        const expenses = this.getExpensesForRange(range.start, range.end, 'extra');
+        const expenses = this.getExpensesForRange(range.start, range.end, 'extra').filter(isReimbursableExtra);
         const total = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
         return { expenses, total };
     }
@@ -242,7 +258,8 @@ class DataStore {
         const yearIncomes = this.incomes.filter(i => { const d = new Date(i.date); return d >= startDate && d <= endDate; });
         const yearExpenses = this.expenses.filter(e => { const d = new Date(e.date); return d >= startDate && d <= endDate; });
         const totalIncome = yearIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
-        const totalExtra = yearExpenses.filter(e => e.type === 'extra').reduce((sum, e) => sum + Number(e.amount), 0);
+        const totalExtra = yearExpenses.filter(isReimbursableExtra).reduce((sum, e) => sum + Number(e.amount), 0);
+        const totalExtraRecord = yearExpenses.filter(isRecordOnlyExtra).reduce((sum, e) => sum + Number(e.amount), 0);
         const monthsWithIncome = new Set(); yearIncomes.forEach(i => monthsWithIncome.add(new Date(i.date).getMonth()));
         let totalMonths = monthsWithIncome.size;
         if (isCurrentYear && totalMonths === 0) totalMonths = today.getMonth() + 1;
@@ -250,7 +267,7 @@ class DataStore {
         else if (totalMonths === 0) totalMonths = 12;
         const totalDaily = totalMonths * this.settings.dailyBudget;
         const totalWife = Math.max(0, totalIncome - totalDaily - totalExtra);
-        return { totalIncome, totalDaily, totalExtra, totalWife, isCurrentYear };
+        return { totalIncome, totalDaily, totalExtra, totalExtraRecord, totalWife, isCurrentYear };
     }
     getMonthlyBreakdown(year) {
         const today = new Date(); const isCurrentYear = year === today.getFullYear(); const months = [];
@@ -261,19 +278,55 @@ class DataStore {
             const monthIncomes = this.incomes.filter(i => { const d = new Date(i.date); return d >= monthStart && d <= cutOff; });
             const monthExpenses = this.expenses.filter(e => { const d = new Date(e.date); return d >= monthStart && d <= cutOff; });
             const dailyActual = monthExpenses.filter(e => e.type === 'daily').reduce((sum, e) => sum + Number(e.amount), 0);
-            const extra = monthExpenses.filter(e => e.type === 'extra').reduce((sum, e) => sum + Number(e.amount), 0);
+            const extra = monthExpenses.filter(isReimbursableExtra).reduce((sum, e) => sum + Number(e.amount), 0);
+            const extraRecord = monthExpenses.filter(isRecordOnlyExtra).reduce((sum, e) => sum + Number(e.amount), 0);
             const dailyFixed = this.settings.dailyBudget;
             const totalIncome = monthIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
             const wife = totalIncome > 0 ? Math.max(0, totalIncome - dailyFixed - extra) : 0;
-            months.push({ month: m, daily: dailyFixed, extra, wife, total: dailyFixed + extra + wife, hasData: dailyActual > 0 || extra > 0 || totalIncome > 0 });
+            months.push({
+                month: m, daily: dailyFixed, extra, extraRecord, wife,
+                total: dailyFixed + extra + extraRecord + wife,
+                hasData: dailyActual > 0 || extra > 0 || extraRecord > 0 || totalIncome > 0
+            });
         }
         return months.filter(m => m.hasData).reverse();
     }
-    getExtraCategoryBreakdown(year) {
+    getMonthlySeries(year) {
+        const today = new Date();
+        const isCurrentYear = year === today.getFullYear();
+        const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+        const rows = [];
+        const lastMonth = isCurrentYear ? today.getMonth() : 11;
+        for (let m = lastMonth; m >= 0; m--) {
+            const monthEnd = new Date(year, m + 1, 0, 23, 59, 59);
+            const monthStart = new Date(year, m, 1);
+            const cutOff = isCurrentYear && m === today.getMonth() ? today : monthEnd;
+            const monthIncomes = this.incomes.filter(i => {
+                const d = new Date(i.date);
+                return d >= monthStart && d <= cutOff;
+            });
+            const monthExpenses = this.expenses.filter(e => {
+                const d = new Date(e.date);
+                return d >= monthStart && d <= cutOff;
+            });
+            const income = monthIncomes.reduce((sum, i) => sum + Number(i.amount), 0);
+            const daily = this.settings.dailyBudget;
+            const extra = monthExpenses.filter(isReimbursableExtra).reduce((sum, e) => sum + Number(e.amount), 0);
+            const extraRecord = monthExpenses.filter(isRecordOnlyExtra).reduce((sum, e) => sum + Number(e.amount), 0);
+            const wife = income > 0 ? Math.max(0, income - daily - extra) : 0;
+            rows.push({ month: m, monthLabel: monthNames[m], income, daily, extra, extraRecord, wife });
+        }
+        return rows;
+    }
+    getExtraCategoryBreakdown(year, recordOnly = false) {
         const today = new Date(); const isCurrentYear = year === today.getFullYear();
         const endDate = isCurrentYear ? today : new Date(year, 11, 31, 23, 59, 59);
         const startDate = new Date(year, 0, 1);
-        const extraExpenses = this.expenses.filter(e => { const d = new Date(e.date); return e.type === 'extra' && d >= startDate && d <= endDate; });
+        const extraExpenses = this.expenses.filter(e => {
+            const d = new Date(e.date);
+            if (e.type !== 'extra' || d < startDate || d > endDate) return false;
+            return recordOnly ? isRecordOnlyExtra(e) : isReimbursableExtra(e);
+        });
         const breakdown = {};
         this.categories.extra.forEach(cat => breakdown[cat.id] = { name: cat.name, emoji: cat.emoji, amount: 0 });
         extraExpenses.forEach(exp => { if (breakdown[exp.categoryId]) breakdown[exp.categoryId].amount += Number(exp.amount); });
@@ -297,13 +350,19 @@ class App {
         this.editingExpenseId = null;
         this.editingIncomeId = null;
         this.expenseExpanded = false;
+        this.statsMetric = 'income';
         this.init();
     }
     init() {
-        this.bindEvents();
-        this.renderCategories();
-        this.updateUI();
-        this.updateStatsUI();
+        try {
+            this.bindEvents();
+            this.renderCategories();
+            this.updateUI();
+            this.updateStatsUI();
+        } catch (err) {
+            console.error('App init failed:', err);
+            alert('页面加载出错：' + (err.message || err) + '\n请刷新后重试，或使用 http://localhost:8080 打开。');
+        }
     }
     bindEvents() {
         document.querySelectorAll('.page-tab').forEach(tab => {
@@ -317,11 +376,6 @@ class App {
         document.getElementById('close-settings').addEventListener('click', () => this.closeSettingsModal());
         document.querySelectorAll('.modal-overlay').forEach(el => {
             el.addEventListener('click', (e) => { if (e.target === el) this.closeAllModals(); });
-        });
-        document.querySelectorAll('.type-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const type = e.target.dataset.type; this.switchExpenseType(type);
-            });
         });
         document.getElementById('save-expense').addEventListener('click', () => this.saveExpense());
         document.getElementById('save-income').addEventListener('click', () => this.saveIncome());
@@ -337,42 +391,37 @@ class App {
                 }
             });
         }
-        document.getElementById('income-amount').addEventListener('input', () => this.updateIncomePreview());
+        const incomeSourceSelect = document.getElementById('income-source-select');
+        if (incomeSourceSelect) {
+            incomeSourceSelect.addEventListener('change', () => this.syncIncomeSourceOtherVisibility());
+        }
         document.getElementById('year-select').addEventListener('change', (e) => { this.selectedYear = Number(e.target.value); this.updateStatsUI(); });
         document.getElementById('prev-year').addEventListener('click', () => { this.selectedYear--; this.updateStatsUI(); });
         document.getElementById('next-year').addEventListener('click', () => { this.selectedYear++; this.updateStatsUI(); });
-        document.getElementById('prev-year-extra').addEventListener('click', () => { this.selectedYear--; this.updateExtraCategoriesPage(); });
-        document.getElementById('next-year-extra').addEventListener('click', () => { this.selectedYear++; this.updateExtraCategoriesPage(); });
-        document.getElementById('year-select-extra').addEventListener('change', (e) => { this.selectedYear = Number(e.target.value); this.updateExtraCategoriesPage(); });
+        document.querySelectorAll('.sum-item[data-metric]').forEach(el => {
+            el.addEventListener('click', () => {
+                this.statsMetric = el.dataset.metric;
+                this.updateStatsUI();
+            });
+        });
         document.getElementById('expand-expense').addEventListener('click', () => this.toggleExpenseExpand());
         document.addEventListener('click', (e) => {
             const editBtn = e.target.closest('.t-action-btn.edit');
             const deleteBtn = e.target.closest('.t-action-btn.delete');
-            if (editBtn) {
-                const id = editBtn.dataset.id;
-                if (document.getElementById('income-list-full').contains(editBtn)) this.editIncome(id);
-                else this.editExpense(id);
-            }
-            if (deleteBtn) {
-                const id = deleteBtn.dataset.id;
-                if (document.getElementById('income-list-full').contains(deleteBtn)) this.deleteIncome(id);
-                else this.deleteExpense(id);
-            }
+            if (editBtn) this.editExpense(editBtn.dataset.id);
+            if (deleteBtn) this.deleteExpense(deleteBtn.dataset.id);
         });
     }
     switchPage(page) {
         document.querySelectorAll('.page-tab').forEach(t => t.classList.toggle('active', t.dataset.page === page));
         document.getElementById('home-page').style.display = page === 'home' ? 'block' : 'none';
         document.getElementById('stats-page').style.display = page === 'stats' ? 'block' : 'none';
-        document.getElementById('income-list-page').style.display = page === 'income-list' ? 'block' : 'none';
-        document.getElementById('extra-categories-page').style.display = page === 'extra-categories' ? 'block' : 'none';
         if (page === 'stats') this.updateStatsUI();
-        if (page === 'income-list') this.renderFullIncomeList();
-        if (page === 'extra-categories') this.updateExtraCategoriesPage();
     }
     renderCategories() {
         const grid = document.getElementById('category-grid');
-        const cats = this.store.categories[this.currentExpenseType];
+        if (!grid) return;
+        const cats = this.store.categories.extra || DEFAULT_CATEGORIES.extra;
         grid.innerHTML = cats.map(cat => `<button class="category-item" data-id="${cat.id}" data-name="${cat.name}" data-emoji="${cat.emoji}"><span class="category-emoji">${cat.emoji}</span><span class="category-name">${cat.name}</span></button>`).join('');
         grid.querySelectorAll('.category-item').forEach(el => {
             el.addEventListener('click', () => {
@@ -383,12 +432,14 @@ class App {
         });
         if (cats.length > 0) grid.querySelector('.category-item').click();
     }
-    switchExpenseType(type) {
-        this.currentExpenseType = type;
-        document.querySelectorAll('.type-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.type === type));
-        this.renderCategories();
+    setExpenseReimburseForm(reimbursable) {
+        const yes = document.querySelector('input[name="expense-reimburse"][value="yes"]');
+        const no = document.querySelector('input[name="expense-reimburse"][value="no"]');
+        if (yes) yes.checked = reimbursable !== false;
+        if (no) no.checked = reimbursable === false;
     }
     openExpenseModal(id = null) {
+        this.currentExpenseType = 'extra';
         this.editingExpenseId = id;
         if (id) {
             const expense = this.store.expenses.find(e => e.id === id);
@@ -397,7 +448,8 @@ class App {
                 document.getElementById('expense-amount').value = expense.amount;
                 document.getElementById('expense-date').value = expense.date;
                 document.getElementById('expense-note').value = expense.note || '';
-                this.switchExpenseType(expense.type);
+                this.setExpenseReimburseForm(expense.reimbursable !== false);
+                this.renderCategories();
                 setTimeout(() => {
                     document.querySelectorAll('.category-item').forEach(el => { if (el.dataset.id === expense.categoryId) el.click(); });
                 }, 50);
@@ -407,11 +459,45 @@ class App {
             document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('expense-amount').value = '';
             document.getElementById('expense-note').value = '';
-            this.switchExpenseType('extra');
+            this.setExpenseReimburseForm(true);
+            this.renderCategories();
         }
         document.getElementById('expense-modal').classList.add('active');
     }
     closeExpenseModal() { this.editingExpenseId = null; document.getElementById('expense-modal').classList.remove('active'); }
+    setIncomeSourceFields(source) {
+        const select = document.getElementById('income-source-select');
+        const other = document.getElementById('income-source-other');
+        if (!select || !other) return;
+        if (INCOME_SOURCE_PRESETS.includes(source) && source !== '其他') {
+            select.value = source;
+            other.hidden = true;
+            other.value = '';
+        } else {
+            select.value = '其他';
+            other.hidden = false;
+            other.value = source && source !== '其他' ? source : '';
+        }
+    }
+    syncIncomeSourceOtherVisibility() {
+        const select = document.getElementById('income-source-select');
+        const other = document.getElementById('income-source-other');
+        if (!select || !other) return;
+        const isOther = select.value === '其他';
+        other.hidden = !isOther;
+        if (!isOther) other.value = '';
+    }
+    getIncomeSourceFromForm() {
+        const select = document.getElementById('income-source-select');
+        const other = document.getElementById('income-source-other');
+        if (!select) return '工资';
+        if (select.value === '其他') {
+            const custom = (other && other.value.trim()) || '';
+            if (!custom) { alert('请填写收入来源'); return null; }
+            return custom;
+        }
+        return select.value;
+    }
     openIncomeModal(id = null) {
         this.editingIncomeId = id;
         if (id) {
@@ -419,47 +505,16 @@ class App {
             if (income) {
                 document.getElementById('income-modal-title').textContent = '编辑收入';
                 document.getElementById('income-amount').value = income.amount;
-                document.getElementById('income-source').value = income.source;
+                this.setIncomeSourceFields(income.source);
                 document.getElementById('income-date').value = income.date;
-                document.getElementById('income-preview-section').style.display = 'none';
             }
         } else {
             document.getElementById('income-modal-title').textContent = '记收入';
             document.getElementById('income-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('income-amount').value = '';
-            document.getElementById('income-source').value = '工资';
-            document.getElementById('income-preview-section').style.display = 'block';
-            document.getElementById('alloc-daily').textContent = '¥' + this.store.settings.dailyBudget;
-            this.loadLastExtraExpenses();
-            this.updateIncomePreview();
+            this.setIncomeSourceFields('工资');
         }
         document.getElementById('income-modal').classList.add('active');
-    }
-    loadLastExtraExpenses() {
-        const { expenses, total } = this.store.getLastCycleExtraSummary();
-        const list = document.getElementById('last-extra-list');
-        if (expenses.length === 0) {
-            list.innerHTML = '<p style="color:#86868b;font-size:14px;">上月无额外支出</p>';
-            document.getElementById('last-extra-total').textContent = '¥0';
-        } else {
-            list.innerHTML = expenses.map(exp => `<div class="mini-t-item"><span class="mini-t-cat">${exp.categoryName}</span><span class="mini-t-amt">-¥${Number(exp.amount).toFixed(0)}</span></div>`).join('');
-            document.getElementById('last-extra-total').textContent = '¥' + total.toFixed(0);
-        }
-    }
-    updateIncomePreview() {
-        if (this.editingIncomeId) return;
-        const newIncomeAmount = Number(document.getElementById('income-amount').value) || 0;
-        const dailyBudget = this.store.settings.dailyBudget;
-        const { total: extraTotal } = this.store.getLastCycleExtraSummary();
-
-        const currentRange = this.store.getPaydayRange();
-        const existingIncome = this.store.getTotalIncomeForRange(currentRange.start, currentRange.end);
-        const totalIncome = existingIncome + newIncomeAmount;
-        const wifeAmount = this.store.wifeShareForCycle(totalIncome, extraTotal);
-
-        document.getElementById('alloc-daily').textContent = '¥' + dailyBudget.toFixed(0);
-        document.getElementById('alloc-extra').textContent = '¥' + extraTotal.toFixed(0);
-        document.getElementById('alloc-wife').textContent = '¥' + wifeAmount.toFixed(0);
     }
     closeIncomeModal() { this.editingIncomeId = null; document.getElementById('income-modal').classList.remove('active'); }
     openSettingsModal() {
@@ -489,8 +544,11 @@ class App {
         const amount = document.getElementById('expense-amount').value;
         if (!amount || amount <= 0) { alert('请输入金额'); return; }
         if (!this.selectedCategory) { alert('请选择分类'); return; }
+        const reimburseNo = document.querySelector('input[name="expense-reimburse"][value="no"]');
+        const reimbursable = !(reimburseNo && reimburseNo.checked);
         const expenseData = {
-            amount: Number(amount), type: this.currentExpenseType, categoryId: this.selectedCategory.id,
+            amount: Number(amount), type: 'extra', reimbursable,
+            categoryId: this.selectedCategory.id,
             categoryName: this.selectedCategory.name, categoryEmoji: this.selectedCategory.emoji,
             date: document.getElementById('expense-date').value, note: document.getElementById('expense-note').value
         };
@@ -501,7 +559,9 @@ class App {
     saveIncome() {
         const amount = document.getElementById('income-amount').value;
         if (!amount || amount <= 0) { alert('请输入金额'); return; }
-        let incomeData = { amount: Number(amount), source: document.getElementById('income-source').value, date: document.getElementById('income-date').value };
+        const source = this.getIncomeSourceFromForm();
+        if (!source) return;
+        let incomeData = { amount: Number(amount), source, date: document.getElementById('income-date').value };
         if (!this.editingIncomeId) {
             const dailyBudget = this.store.settings.dailyBudget;
             const { total: extraTotal } = this.store.getLastCycleExtraSummary();
@@ -520,12 +580,11 @@ class App {
     }
     editExpense(id) { this.openExpenseModal(id); }
     deleteExpense(id) { if (confirm('确定要删除这条支出吗？')) { this.store.deleteExpense(id); this.updateUI(); this.updateStatsUI(); } }
-    editIncome(id) { this.openIncomeModal(id); }
-    deleteIncome(id) { if (confirm('确定要删除这条收入吗？')) { this.store.deleteIncome(id); this.updateUI(); this.updateStatsUI(); this.renderFullIncomeList(); } }
     formatDate(dateStr) { const d = new Date(dateStr); return `${d.getMonth() + 1}月${d.getDate()}日`; }
     formatShortDate(date) { return `${date.getMonth() + 1}月${date.getDate()}日`; }
 
     fillYearSelect(selectEl, selectedYear) {
+        if (!selectEl) return;
         const years = this.store.getYearsWithData();
         const minYear = Math.min(...years, selectedYear);
         const maxYear = Math.max(...years, selectedYear);
@@ -567,7 +626,9 @@ class App {
         const oldList = document.getElementById('transactions-list-old');
         const expandBtn = document.getElementById('expand-expense');
 
-        const allExpenses = [...this.store.expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+        const allExpenses = [...this.store.expenses]
+            .filter(exp => !isRecordOnlyExtra(exp))
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
         if (allExpenses.length === 0) {
             list.innerHTML = `<div class="empty-state"><p>还没有支出记录</p></div>`;
             oldList.innerHTML = ''; expandBtn.style.display = 'none'; return;
@@ -590,6 +651,87 @@ class App {
     renderExpenseItem(exp) {
         return `<div class="transaction-item"><div class="t-icon ${exp.type}">${exp.categoryEmoji}</div><div class="t-info"><div class="t-title">${exp.categoryName}</div><div class="t-subtitle">${this.formatDate(exp.date)}</div></div><div class="t-amount negative">-¥${Number(exp.amount).toFixed(0)}</div><div class="t-actions"><button class="t-action-btn edit" data-id="${exp.id}">编辑</button><button class="t-action-btn delete" data-id="${exp.id}">删除</button></div></div>`;
     }
+    metricBarClass(metric) {
+        if (metric === 'income') return 'bar-income';
+        if (metric === 'extra' || metric === 'extraRecord') return 'bar-extra';
+        if (metric === 'wife') return 'bar-wife';
+        return 'bar-daily';
+    }
+
+    metricValueClass(metric) {
+        if (metric === 'income') return 'income';
+        if (metric === 'extra' || metric === 'extraRecord') return 'expense';
+        if (metric === 'wife') return 'wife';
+        return 'daily';
+    }
+
+    renderMonthlyListWithBars(rows, metric) {
+        const listEl = document.getElementById('monthly-chart');
+        if (!listEl) return;
+        if (!rows.length) {
+            listEl.innerHTML = '<p class="monthly-list-empty">暂无数据</p>';
+            return;
+        }
+        const maxVal = Math.max(...rows.map(r => Number(r[metric])), 1);
+        const barClass = this.metricBarClass(metric);
+        const valueClass = this.metricValueClass(metric);
+        listEl.innerHTML = rows.map(row => {
+            const val = Number(row[metric]);
+            const pct = Math.max(4, (val / maxVal) * 100);
+            return `
+            <div class="monthly-list-item">
+                <span class="monthly-list-month">${row.monthLabel}</span>
+                <div class="monthly-list-bar-area">
+                    <div class="monthly-list-bar-track">
+                        <div class="monthly-list-bar-fill ${barClass}" style="width:${pct}%"></div>
+                    </div>
+                </div>
+                <span class="monthly-list-value ${valueClass}">¥${val.toFixed(0)}</span>
+            </div>`;
+        }).join('');
+    }
+
+    renderExtraTop5() {
+        const block = document.getElementById('extra-top5-block');
+        const listEl = document.getElementById('extra-top5-list');
+        if (!block || !listEl) return;
+        if (this.statsMetric !== 'extra' && this.statsMetric !== 'extraRecord') {
+            block.hidden = true;
+            return;
+        }
+        block.hidden = false;
+        const recordOnly = this.statsMetric === 'extraRecord';
+        const titleEl = document.getElementById('extra-top5-title');
+        if (titleEl) {
+            titleEl.textContent = recordOnly
+                ? '今年不可报销额外支出 Top 5 分类'
+                : '今年额外支出 Top 5 分类';
+        }
+        const breakdown = this.store.getExtraCategoryBreakdown(this.selectedYear, recordOnly).slice(0, 5);
+        if (!breakdown.length) {
+            listEl.innerHTML = '<p class="monthly-list-empty">暂无分类数据</p>';
+            return;
+        }
+        const maxAmt = Math.max(...breakdown.map(b => b.amount), 1);
+        listEl.innerHTML = breakdown.map((bd, i) => {
+            const pct = Math.max(8, (bd.amount / maxAmt) * 100);
+            return `
+            <div class="extra-top5-item">
+                <span class="extra-top5-rank">${i + 1}</span>
+                <span class="extra-top5-emoji">${bd.emoji}</span>
+                <div class="extra-top5-info">
+                    <div class="extra-top5-name-row">
+                        <span class="extra-top5-name">${bd.name}</span>
+                        <span class="extra-top5-amount">¥${bd.amount.toFixed(0)}</span>
+                    </div>
+                    <div class="extra-top5-bar-track">
+                        <div class="extra-top5-bar-fill" style="width:${pct}%"></div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
     updateStatsUI() {
         this.fillYearSelect(document.getElementById('year-select'), this.selectedYear);
 
@@ -598,63 +740,22 @@ class App {
         document.getElementById('sum-income').textContent = '¥' + summary.totalIncome.toFixed(0);
         document.getElementById('sum-daily').textContent = '¥' + summary.totalDaily.toFixed(0);
         document.getElementById('sum-extra').textContent = '¥' + summary.totalExtra.toFixed(0);
+        const sumExtraRecord = document.getElementById('sum-extra-record');
+        if (sumExtraRecord) sumExtraRecord.textContent = '¥' + (summary.totalExtraRecord || 0).toFixed(0);
         document.getElementById('sum-wife').textContent = '¥' + summary.totalWife.toFixed(0);
 
-        const months = this.store.getMonthlyBreakdown(this.selectedYear);
-        const maxTotal = Math.max(...months.map(m => m.total), 1);
-        const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-
-        document.getElementById('monthly-chart').innerHTML = months.map(m => {
-            const dailyPct = (m.daily / maxTotal) * 100;
-            const extraPct = (m.extra / maxTotal) * 100;
-            const wifePct = (m.wife / maxTotal) * 100;
-            return `
-                <div class="month-bar-item">
-                    <div class="month-name">${monthNames[m.month]}</div>
-                    <div class="month-bar-wrap">
-                        ${m.daily > 0 ? `<div class="month-seg daily" style="width:${dailyPct}%;left:0;"></div>` : ''}
-                        ${m.extra > 0 ? `<div class="month-seg extra" style="width:${extraPct}%;left:${dailyPct}%;"></div>` : ''}
-                        ${m.wife > 0 ? `<div class="month-seg wife" style="width:${wifePct}%;left:${dailyPct + extraPct}%;"></div>` : ''}
-                    </div>
-                    <div class="month-total">${m.total > 0 ? '¥' + m.total.toFixed(0) : '-'}</div>
-                </div>
-                <div class="month-legend">
-                    <div class="legend-item"><span class="legend-color daily"></span><span class="legend-text">日常 ¥${m.daily.toFixed(0)}</span></div>
-                    <div class="legend-item"><span class="legend-color extra"></span><span class="legend-text">额外 ¥${m.extra.toFixed(0)}</span></div>
-                    <div class="legend-item"><span class="legend-color wife"></span><span class="legend-text">老婆 ¥${m.wife.toFixed(0)}</span></div>
-                </div>`;
-        }).join('');
-    }
-    renderFullIncomeList() {
-        const list = document.getElementById('income-list-full');
-        const years = this.store.getYearsWithData();
-        let html = '';
-        years.forEach(year => {
-            const incomes = this.store.getIncomesForYear(year);
-            if (incomes.length > 0) {
-                html += `<div class="section-header">${year}年</div>`;
-                incomes.forEach(inc => {
-                    html += `<div class="income-item"><div class="income-icon">💰</div><div class="income-info"><div class="income-title">${inc.source}</div><div class="income-date">${this.formatDate(inc.date)}</div></div><div class="income-amount">+¥${Number(inc.amount).toFixed(0)}</div><div class="t-actions"><button class="t-action-btn edit" data-id="${inc.id}">编辑</button><button class="t-action-btn delete" data-id="${inc.id}">删除</button></div></div>`;
-                });
-            }
+        document.querySelectorAll('.sum-item[data-metric]').forEach(el => {
+            el.classList.toggle('active', el.dataset.metric === this.statsMetric);
         });
-        if (!html) html = `<div class="empty-state"><p>还没有收入记录</p></div>`;
-        list.innerHTML = html;
-    }
-    updateExtraCategoriesPage() {
-        const years = this.store.getYearsWithData();
-        const yearSelect = document.getElementById('year-select-extra');
-        const minYear = Math.min(...years, this.selectedYear);
-        const maxYear = Math.max(...years, this.selectedYear);
-        const allYears = []; for (let y = minYear - 2; y <= maxYear + 2; y++) allYears.push(y);
-        yearSelect.innerHTML = allYears.map(y => `<option value="${y}" ${y === this.selectedYear ? 'selected' : ''}>${y}年</option>`).join('');
 
-        const breakdown = this.store.getExtraCategoryBreakdown(this.selectedYear);
-        const maxExtra = Math.max(...breakdown.map(b => b.amount), 1);
-        document.getElementById('year-subtitle-extra').textContent = this.selectedYear === new Date().getFullYear() ? '截至今天' : '全年';
-        const bdEl = document.getElementById('extra-breakdown-full');
-        if (!breakdown.length) bdEl.innerHTML = '<p style="color:#86868b;text-align:center;padding:20px;">暂无额外支出</p>';
-        else bdEl.innerHTML = breakdown.map(bd => `<div class="breakdown-item"><div class="bd-icon">${bd.emoji}</div><div class="bd-info"><div class="bd-name">${bd.name}</div><div class="bd-bar-wrap"><div class="bd-bar" style="width:${(bd.amount / maxExtra)*100}%;"></div></div></div><div class="bd-amount">¥${bd.amount.toFixed(0)}</div></div>`).join('');
+        const titleEl = document.getElementById('monthly-section-title');
+        if (titleEl) titleEl.textContent = STATS_METRIC_LABELS[this.statsMetric] || STATS_METRIC_LABELS.income;
+
+        const series = this.store.getMonthlySeries(this.selectedYear);
+        const metric = this.statsMetric;
+        const rows = series.filter(row => Number(row[metric]) > 0);
+        this.renderMonthlyListWithBars(rows, metric);
+        this.renderExtraTop5();
     }
 }
 

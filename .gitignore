@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# npm (local tooling only)
+node_modules/
+
 # Editor / swap
 *.swp
 *~

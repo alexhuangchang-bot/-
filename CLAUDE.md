@@ -36,7 +36,8 @@ node server.js
 
 ### 金额分配公式
 ```
-交给老婆 = max(0, 本期收入 - 日常预算 - 上月额外支出)
+交给老婆 = max(0, 本期收入 - 日常预算 - 上月可报销额外支出)
+不可报销额外（reimbursable: false）仅统计页记录，不进首页、不扣交给老婆
 ```
 
 ### 数据结构
@@ -45,7 +46,7 @@ node server.js
 {
   settings: { dailyBudget: 6300, payday: 16 },
   incomes: [{ id, amount, source, date }],
-  expenses: [{ id, amount, type: 'daily'|'extra', category, date, note }],
+  expenses: [{ id, amount, type: 'extra', reimbursable: true|false, category, date, note }],
   categories: { daily: [...], extra: [...] }
 }
 ```
